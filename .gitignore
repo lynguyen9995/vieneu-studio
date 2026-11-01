@@ -1,0 +1,25 @@
+# --- secrets: the gateway token lives here, never commit it ---
+.env
+
+# --- upstream engine: its own git repo, re-cloned by REBUILD-BLUEPRINT.md ---
+VieNeu-TTS/
+
+# --- environment and caches ---
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+cache/
+
+# --- user data and machine state (not code) ---
+voices/
+outputs/
+logs/
+engine.json
+engine.json.tmp
+*.wav
+*.mp3
+*.bak
+
+# --- test leftovers ---
+tests/.tmp-clients/

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="vieneu-token" content="__VIENEU_TOKEN__">
+<title>VieNeu Studio</title>
+<link rel="stylesheet" href="/app/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">🦜</span><div><h1>VieNeu Studio</h1><p>Giọng nói tiếng Việt chạy trên máy bạn · dùng chung với Claude qua MCP</p></div></div>
+  <div id="status" class="status" title="Trạng thái"><span class="dot"></span><span class="txt">Đang kiểm tra…</span></div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-tab="read">📖 Đọc văn bản</button>
+  <button class="tab" data-tab="conv">🎭 Hội thoại</button>
+  <button class="tab" data-tab="srt">📝 Phụ đề SRT</button>
+  <button class="tab" data-tab="clone">🎤 Clone giọng</button>
+  <button class="tab" data-tab="voices">🗂️ Kho giọng</button>
+  <button class="tab" data-tab="history">🕘 Lịch sử</button>
+  <button class="tab" data-tab="model">🧠 Model</button>
+</nav>
+
+<main>
+  <!-- ĐỌC VĂN BẢN -->
+  <section id="tab-read" class="panel active">
+    <div class="grid">
+      <div class="card">
+        <div class="row between">
+          <label for="read-text" class="lbl">Văn bản</label>
+          <div class="row gap">
+            <label class="btn ghost small">📄 Nạp .txt / .pdf<input type="file" id="read-file" accept=".txt,.pdf,text/plain,application/pdf" hidden></label>
+            <span id="read-count" class="muted small">0 ký tự</span>
+          </div>
+        </div>
+        <textarea id="read-text" rows="11" placeholder="Dán hoặc gõ văn bản cần đọc vào đây… (Ctrl+Enter để đọc)"></textarea>
+        <div class="row gap wrap tags">
+          <span class="muted small">Chèn cảm xúc (thử nghiệm):</span>
+          <button class="chip" data-tag="[cười]">😄 [cười]</button>
+          <button class="chip" data-tag="[thở dài]">😮‍💨 [thở dài]</button>
+          <button class="chip" data-tag="[hắng giọng]">🗣️ [hắng giọng]</button>
+        </div>
+        <div class="row gap wrap">
+          <div class="field grow"><label class="lbl" for="read-voice">Giọng đọc</label><select id="read-voice" class="voice-select"></select></div>
+          <button id="read-preview" class="btn ghost" title="Nghe thử giọng này với một câu ngắn">🔈 Nghe thử giọng</button>
+        </div>
+        <div class="opts">
+          <div class="field"><label class="lbl">Nghỉ giữa các đoạn <b id="v-read-gap">0.5</b> giây</label><input type="range" id="read-gap" min="0" max="2" step="0.1" value="0.5"></div>
+          <label class="check"><input type="checkbox" id="opt-clean" checked> Làm sạch văn bản (thêm dấu câu cuối dòng để ngắt nghỉ tự nhiên)</label>
+          <label class="check"><input type="checkbox" id="opt-live" checked> Phát ngay khi có đoạn đầu, không chờ đọc xong</label>
+          <label class="check"><input type="checkbox" id="opt-norm" checked> Cân bằng âm lượng file kết quả</label>
+        </div>
+        <details class="adv">
+          <summary>⚙️ Nâng cao</summary>
+          <div class="adv-grid">
+            <div class="field"><label class="lbl" for="adv-rate">Tần số mẫu</label>
+              <select id="adv-rate"><option value="48000" selected>48 kHz (gốc, nét nhất)</option><option value="24000">24 kHz</option><option value="16000">16 kHz</option></select></div>
+            <div class="field"><label class="lbl">Độ biến hoá (temperature) <b id="v-temperature">0.8</b></label><input type="range" id="adv-temperature" min="0" max="2" step="0.05" value="0.8"></div>
+            <div class="field"><label class="lbl">top_k <b id="v-top_k">25</b></label><input type="range" id="adv-top_k" min="1" max="200" step="1" value="25"></div>
+            <div class="field"><label class="lbl">top_p <b id="v-top_p">0.95</b></label><input type="range" id="adv-top_p" min="0.05" max="1" step="0.01" value="0.95"></div>
+            <div class="field"><label class="lbl">Phạt lặp (repetition) <b id="v-repetition_penalty">1.2</b></label><input type="range" id="adv-repetition_penalty" min="1" max="2" step="0.05" value="1.2"></div>
+            <div class="field"><label class="lbl">Độ dài mỗi khúc (max_chars) <b id="v-max_chars">256</b></label><input type="range" id="adv-max_chars" min="64" max="512" step="8" value="256"></div>
+          </div>
+          <p class="muted small">Áp dụng cho mọi tab. Giọng lạ, lặp từ hay "nói nhảm" → hạ temperature về 0.6–0.7 hoặc tăng phạt lặp. Đọc nhanh/hụt hơi ở câu dài → giảm max_chars. Tốc độ đọc đi theo giọng mẫu (model không hỗ trợ chỉnh tốc độ). <button id="adv-reset" class="link">Khôi phục mặc định</button></p>
+        </details>
+        <div class="row gap">
+          <button id="read-go" class="btn primary big">🎵 Tạo giọng nói</button>
+          <button id="read-stop" class="btn ghost" hidden>⏹ Dừng</button>
+        </div>
+      </div>
+      <div class="card result" id="read-result">
+        <h3>Kết quả</h3>
+        <div class="empty">Chưa có audio. Gõ văn bản, chọn giọng rồi bấm <b>Tạo giọng nói</b>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HỘI THOẠI -->
+  <section id="tab-conv" class="panel">
+    <div class="grid">
+      <div class="card">
+        <label class="lbl" for="conv-text">Kịch bản hội thoại <span class="muted">— mỗi dòng “Tên: lời thoại”</span></label>
+        <textarea id="conv-text" rows="11" placeholder="Phương: Chào mọi người, hôm nay mình bàn về thời tiết nhé.&#10;Dũng: Ừ, nghe nói mai Suwon trời lạnh lắm.&#10;Phương: Vậy nhớ mang áo khoác nha [cười]."></textarea>
+        <div class="row gap wrap">
+          <button id="conv-scan" class="btn ghost">🔍 Quét nhân vật</button>
+          <div class="field"><label class="lbl">Khoảng lặng giữa câu <b id="v-conv-gap">0.3</b> giây</label><input type="range" id="conv-gap" min="0" max="3" step="0.1" value="0.3"></div>
+        </div>
+        <div id="conv-speakers" class="speakers"><p class="muted small">Bấm <b>Quét nhân vật</b> để gán giọng cho từng người.</p></div>
+        <p class="muted small">Dùng chung tuỳ chọn "Phát ngay", "Cân bằng âm lượng" và ⚙️ Nâng cao ở tab Đọc văn bản.</p>
+        <div class="row gap">
+          <button id="conv-go" class="btn primary big">🎭 Tạo hội thoại</button>
+          <button id="conv-stop" class="btn ghost" hidden>⏹ Dừng</button>
+        </div>
+      </div>
+      <div class="card result" id="conv-result"><h3>Kết quả</h3><div class="empty">Chưa có audio.</div></div>
+    </div>
+  </section>
+
+  <!-- SRT -->
+  <section id="tab-srt" class="panel">
+    <div class="grid">
+      <div class="card">
+        <p class="muted">Tải lên file <b>.srt tiếng Việt</b> (đã có lời và mốc thời gian). Mỗi câu được đọc rồi ghép thành <b>một file audio</b> theo đúng mốc thời gian — tiện để lồng tiếng / thuyết minh video.</p>
+        <label class="drop" id="srt-drop"><input type="file" id="srt-file" accept=".srt" hidden><span>📝 Bấm hoặc kéo thả file .srt vào đây</span></label>
+        <div id="srt-info" class="muted small"></div>
+        <div class="row gap wrap">
+          <div class="field grow"><label class="lbl" for="srt-voice">Giọng đọc</label><select id="srt-voice" class="voice-select"></select></div>
+          <label class="check"><input type="checkbox" id="srt-timing" checked> Giữ đúng mốc thời gian</label>
+        </div>
+        <p class="muted small">Giữ mốc: chèn khoảng lặng theo phụ đề; câu nào đọc dài hơn khung thì câu sau lùi lại, không đè nhau. Bỏ chọn để nối liền các câu. Tải về được cả WAV và MP3.</p>
+        <div class="row gap">
+          <button id="srt-go" class="btn primary big" disabled>🎵 Tạo audio từ SRT</button>
+          <button id="srt-stop" class="btn ghost" hidden>⏹ Dừng</button>
+        </div>
+      </div>
+      <div class="card result" id="srt-result"><h3>Kết quả</h3><div class="empty">Chưa có audio.</div></div>
+    </div>
+  </section>
+
+  <!-- CLONE -->
+  <section id="tab-clone" class="panel">
+    <div class="grid">
+      <div class="card">
+        <h3>1. Lấy giọng mẫu (6–8 giây là đẹp)</h3>
+        <p class="muted small">Nói tự nhiên 1–2 câu dài, chỗ yên tĩnh, gần mic (tai nghe có mic càng tốt), đúng giọng bạn muốn máy đọc. Không cần gõ lại nội dung clip.</p>
+        <div class="row gap wrap">
+          <button id="rec-btn" class="btn primary">🎙️ Bắt đầu ghi âm</button>
+          <span id="rec-time" class="muted">0.0 s</span>
+          <span class="muted">hoặc</span>
+          <label class="btn ghost">📁 Chọn file (wav, mp3, m4a, ogg, flac, webm)<input type="file" id="clone-file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" hidden></label>
+        </div>
+        <p class="muted small">Gợi ý câu để đọc: <i>“Chào các bạn, hôm nay thời tiết ở Suwon khá lạnh, buổi sáng chỉ khoảng năm độ, nhớ mặc thêm áo ấm khi ra ngoài nhé.”</i></p>
+        <div id="clone-samples" class="row gap wrap"></div>
+        <div id="clone-preview" class="muted small">Chưa có giọng mẫu.</div>
+        <label class="check"><input type="checkbox" id="clone-denoise" checked> Tự lọc tạp âm (nên bật; clip đã rất sạch thì tắt để giữ chất giọng)</label>
+        <h3>2. Nghe thử trước khi lưu</h3>
+        <textarea id="clone-test" rows="2">Xin chào, đây là giọng nói vừa được nhân bản. Nghe có giống không?</textarea>
+        <div class="row gap"><button id="clone-try" class="btn" disabled>▶️ Nghe thử (chưa lưu)</button><span id="clone-try-note" class="muted small"></span></div>
+        <h3>3. Đặt tên & lưu</h3>
+        <div class="field"><label class="lbl" for="clone-name">Tên giọng</label><input id="clone-name" maxlength="64" placeholder="VD: Lý"></div>
+        <div class="field"><label class="lbl" for="clone-desc">Mô tả (tuỳ chọn)</label><input id="clone-desc" maxlength="200" placeholder="nam, miền Nam, đọc tin"></div>
+        <div class="consent">
+          <label class="check"><input type="checkbox" id="clone-consent"> <b>Chủ giọng đã đồng ý cho nhân bản giọng này</b> (giọng của tôi, hoặc người đó cho phép)</label>
+          <input id="clone-note" maxlength="400" value="Đây là giọng của tôi, tôi đồng ý nhân bản.">
+        </div>
+        <button id="clone-go" class="btn primary big" disabled>🧬 Lưu giọng vào kho</button>
+        <p id="clone-missing" class="muted small"></p>
+      </div>
+      <div class="card result" id="clone-result">
+        <h3>Sau khi lưu</h3>
+        <ul class="muted">
+          <li>Giọng nằm trong <code>voices/</code>, không mất khi khởi động lại hay đổi model.</li>
+          <li>Dùng được ngay ở mọi tab, trong lệnh <code>speak</code>, và Claude gọi được qua tool <code>vieneu</code>.</li>
+          <li>Xoá trong tab <b>Kho giọng</b>. Đổi clip thì xoá rồi tạo lại cùng tên.</li>
+          <li>Clone chỉ giống khoảng 70–80% (giới hạn của model mở v3). Giống hơn nữa: fine-tune LoRA với 10–30 phút audio, rồi chọn ở tab <b>Model</b>.</li>
+        </ul>
+        <div id="clone-out"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KHO GIỌNG -->
+  <section id="tab-voices" class="panel">
+    <div class="card">
+      <div class="row between wrap gap">
+        <input id="voice-filter" placeholder="Lọc theo tên, miền, giới tính, phong cách…" class="grow">
+        <button id="voice-refresh" class="btn ghost">🔄 Tải lại</button>
+      </div>
+      <table class="tbl"><thead><tr><th>Giọng</th><th>Mô tả</th><th>Loại</th><th></th></tr></thead><tbody id="voice-rows"></tbody></table>
+    </div>
+  </section>
+
+  <!-- LỊCH SỬ -->
+  <section id="tab-history" class="panel">
+    <div class="card">
+      <div class="row between"><p class="muted">File trong <code>outputs/</code> — gồm cả file tạo từ web, lệnh <code>speak</code> và Claude.</p><button id="hist-refresh" class="btn ghost">🔄 Tải lại</button></div>
+      <table class="tbl"><thead><tr><th>File</th><th>Thời lượng</th><th>Nguồn</th><th>Lúc tạo</th><th></th></tr></thead><tbody id="hist-rows"></tbody></table>
+      <div id="hist-player"></div>
+    </div>
+  </section>
+
+  <!-- MODEL -->
+  <section id="tab-model" class="panel">
+    <div class="grid">
+      <div class="card">
+        <h3>Chọn model</h3>
+        <div id="model-options" class="model-options"></div>
+        <div class="field" id="model-lora-box" hidden><label class="lbl" for="model-lora">Thư mục model LoRA đã merge</label><input id="model-lora" placeholder="C:\AI-Workspace\Projects\vieneu-studio\VieNeu-TTS\finetune\output\my_voice\merged"></div>
+        <button id="model-go" class="btn primary big">🔄 Tải model</button>
+        <p class="muted small">Đổi model sẽ tắt model cũ và tải model mới (vài chục giây; lần đầu phải tải về có thể vài phút). Trong lúc đó Claude và web tạm không đọc được. Giọng đã clone tự nạp lại sau khi xong.</p>
+      </div>
+      <div class="card result">
+        <h3>Trạng thái</h3>
+        <div id="model-status" class="muted">Đang kiểm tra…</div>
+        <pre id="model-log" class="log" hidden></pre>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast" class="toast" hidden></div>
+<script src="/app/app.js"></script>
+</body>
+</html>

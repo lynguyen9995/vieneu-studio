@@ -1,0 +1,6 @@
+{
+  "model": "vieneu-v3-turbo",
+  "voice": "Mai Anh",
+  "response_format": "wav",
+  "input": "Xin chào, đây là bản kiểm tra giọng đọc tiếng Việt trên máy tính của Ly."
+}
