@@ -21,7 +21,7 @@ VRAM on the RTX 3060 Laptop 6 GB: VieNeu ~0.9 GB + hy-mt2 ~1.5 GB + Whisper turb
 ## Install (once, Windows, in `C:\AI-Workspace\Projects\vieneu-studio`)
 
 ```powershell
-& "$env:USERPROFILE\.local\bin\uv.exe" sync                       # faster-whisper, yt-dlp, cuBLAS (~700 MB)
+& "$env:USERPROFILE\.local\bin\uv.exe" sync                       # faster-whisper, yt-dlp (~150 MB)
 winget install --id DenoLand.Deno                                  # yt-dlp needs a JavaScript runtime for YouTube
 & "$env:USERPROFILE\.local\bin\uv.exe" run --no-sync python -m stt.server --download   # model ~1.6 GB, prints "OK: … on cuda"
 ```
@@ -29,6 +29,10 @@ winget install --id DenoLand.Deno                                  # yt-dlp need
 Then restart the services (`stop-all.bat`, then `wscript autostart\run-hidden.vbs now`). The launcher starts
 the listening service as an **optional** third service: if it fails, narration from captions keeps working
 (see `logs/stt.log`).
+
+cuBLAS on Windows: taken from `VieNeu-TTS/.venv/Lib/site-packages/torch/lib` (the voice engine's PyTorch).
+Without it Whisper falls back to CPU int8 (`/v1/listen/status` shows `device: cpu`). On Linux the
+`nvidia-cublas-cu12` wheel is installed and preloaded.
 
 ## API
 
