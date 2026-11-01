@@ -63,6 +63,8 @@ def build(root: Path):
     from dotenv import dotenv_values
     env = dotenv_values(root / '.env') if (root / '.env').exists() else {}
     os.environ.setdefault('HF_HOME', str(root / 'cache' / 'huggingface'))
+    os.environ.setdefault('HF_HUB_DISABLE_SYMLINKS_WARNING', '1')     # Windows without Developer Mode: copies, fine
+    os.environ.setdefault('HF_HUB_DISABLE_IMPLICIT_TOKEN', '1')
     try:
         idle = max(60, int(env.get('STT_IDLE_SECONDS') or 600))
     except ValueError:
@@ -75,6 +77,9 @@ def build(root: Path):
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    import warnings
+    warnings.filterwarnings('ignore', message='.*symlinks.*')
+    warnings.filterwarnings('ignore', message='.*unauthenticated requests.*')
     root = Path(__file__).resolve().parents[1]
     recognizer, preparer = build(root)
     if '--download' in argv:
