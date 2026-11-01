@@ -41,8 +41,14 @@ class SttError(RuntimeError):
 def add_cuda_libraries() -> None:
     """Make the cuBLAS shipped by the `nvidia-cublas-cu12` wheel findable by CTranslate2.
     Windows: add its bin/ folders to the DLL search path. Linux: preload the libraries by absolute path."""
+    if os.name == 'nt':
+        # Fallback: the voice engine's own PyTorch ships cuBLAS 12 (VieNeu-TTS/.venv/.../torch/lib).
+        torch_lib = Path(__file__).resolve().parents[1] / 'VieNeu-TTS' / '.venv' / 'Lib' / 'site-packages' / 'torch' / 'lib'
+        if (torch_lib / 'cublas64_12.dll').exists():
+            os.add_dll_directory(str(torch_lib))
+            os.environ['PATH'] = os.environ.get('PATH', '') + os.pathsep + str(torch_lib)
     try:
-        import nvidia  # namespace package of the nvidia-* wheels
+        import nvidia  # namespace package of the nvidia-* wheels (preferred: added in front of PATH)
     except ImportError:
         return
     for base in [Path(p) for p in getattr(nvidia, '__path__', [])]:
