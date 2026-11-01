@@ -11,6 +11,9 @@ dependencies = [
   "mcp>=1.20,<2",
   # speech-to-text service (stt/, 127.0.0.1:8002): Whisper + audio download for "listen ahead"
   "faster-whisper>=1.2,<2",
+  # faster-whisper 1.2.1 still calls av.open(metadata_errors=...), removed in PyAV 19 (fixed upstream, not
+  # released yet). Drop this pin once a faster-whisper release includes the fix.
+  "av>=12,<19",
   "yt-dlp[default]>=2025.11.12",
   # cuBLAS for CTranslate2 on the GPU (cuDNN is optional since CTranslate2 4.6.3). Linux only: on Windows the
   # cuBLAS 12 DLLs of the voice engine's PyTorch are used (stt/core.py add_cuda_libraries); no Windows wheel.
