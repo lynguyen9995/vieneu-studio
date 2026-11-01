@@ -75,6 +75,10 @@ Auth: every route except `/health` and the static studio files requires
 | `GET /app/` + `/app/app.js`, `/app/style.css` | browser studio (public, loopback Host only, token injected into `<meta name="vieneu-token">`) | HTML |
 | `POST /v1/translate` | translate lines via Ollama `hy-mt2` (grouped, order kept) | `{texts, target:"vi", group}` → `{translations}` |
 | `GET /v1/translate/status` | is the translator ready | `{ok, model, error?}` |
+| `GET /v1/listen/status` | speech-to-text service health (8002) | `{status, service:"vieneu-stt", loaded, device}` |
+| `POST /v1/listen/prepare` | listen ahead: download audio (yt-dlp) + Whisper, YouTube id only | `{video_id}` → job |
+| `GET /v1/listen/jobs/{id}` | progressive segments of a prepared video | `?since=N` → `{state, segments, next}` |
+| `POST /v1/audio/transcriptions` | OpenAI-compatible transcription of one audio file/chunk | multipart `file` → `{text}` |
 | `POST /v1/pair` | token for the listed browser extension only (no token needed, Origin-checked) | `{token}` |
 | `GET/POST /app/api/engine` | list model options / switch model (restart engine, re-snapshot presets, replay clones) | `{preset, lora_path}` |
 | `POST /app/api/clone-preview` | try a clip before saving (reserved engine slot `studio-preview`) | multipart `file,text,denoise` → PCM + `X-Sample-Rate` |
@@ -149,6 +153,15 @@ not show controls the engine ignores.
   line is > 4×source+20 or < 0.15×source characters.
 - Extension side of the same symptom: ignore seeks < 1.5 s (YouTube seeks by itself on quality switch /
   buffering) and drop roll-up caption lines already shown in the previous event.
+
+## 4d. Listening service (speech-to-text, `stt/`, 127.0.0.1:8002) — details in docs/LISTEN.md
+- Separate process started by the launcher as an OPTIONAL service (failure never blocks engine/gateway);
+  `stop-all` stops it too (only when `/health` says `service: vieneu-stt`).
+- faster-whisper `large-v3-turbo`, int8_float16 on CUDA, CPU int8 fallback; lazy load, unload after 10 idle min.
+- cuBLAS from the `nvidia-cublas-cu12` wheel (DLL dirs added at runtime on Windows). cuDNN not needed (CTranslate2 ≥ 4.6.3).
+- Listen ahead: validated 11-char YouTube id → yt-dlp audio-only (needs Deno) → segments published progressively
+  → audio deleted; text cache capped 50 MB; refuse when < 2 GB free or > 3 h.
+- Live chunks: greedy decoding (beam 1), VAD on. Both use `condition_on_previous_text=False` (fewer loops).
 
 ## 4c. Narration extension (separate project `C:\AI-Workspace\Projects\thuyet-minh`)
 - Chrome MV3, fixed extension ID via manifest `key` (keep `key.pem` out of git); its origin is in `ALLOWED_ORIGINS`.

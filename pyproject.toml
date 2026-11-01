@@ -9,6 +9,11 @@ dependencies = [
   "python-multipart>=0.0.20,<1",
   "python-dotenv>=1,<2",
   "mcp>=1.20,<2",
+  # speech-to-text service (stt/, 127.0.0.1:8002): Whisper + audio download for "listen ahead"
+  "faster-whisper>=1.2,<2",
+  "yt-dlp[default]>=2025.11.12",
+  # cuBLAS for CTranslate2 on the GPU (cuDNN is optional since CTranslate2 4.6.3)
+  "nvidia-cublas-cu12>=12.4,<13; sys_platform == 'win32' or sys_platform == 'linux'",
 ]
 
 [dependency-groups]

@@ -16,6 +16,7 @@ class Settings:
     ffmpeg: str | None = None
     ollama_url: str = 'http://127.0.0.1:11434'
     translate_model: str = 'hy-mt2'
+    stt_url: str = 'http://127.0.0.1:8002'
 
 
 def load_settings(root):
@@ -40,4 +41,12 @@ def load_settings(root):
     return Settings(root=root, token=token, origins=origins,
                     ffmpeg=values.get('FFMPEG_PATH') or shutil.which('ffmpeg'),
                     ollama_url=values.get('OLLAMA_URL') or 'http://127.0.0.1:11434',
-                    translate_model=values.get('TRANSLATE_MODEL') or 'hy-mt2')
+                    translate_model=values.get('TRANSLATE_MODEL') or 'hy-mt2',
+                    stt_url=loopback(values.get('STT_URL') or 'http://127.0.0.1:8002', 'STT_URL'))
+
+
+def loopback(url, name):
+    u = urlsplit(url)
+    if u.scheme != 'http' or u.hostname not in ('127.0.0.1', 'localhost', '::1'):
+        raise ValueError(f'{name} must be an http://127.0.0.1:<port> address')
+    return url.rstrip('/')

@@ -1,6 +1,7 @@
 """Loopback-only HTTP adapter; no model imports or extra GPU allocation."""
 import asyncio
 import hmac
+import re
 from contextlib import asynccontextmanager
 
 import httpx
@@ -14,8 +15,27 @@ from gateway.webapp import (WEB_HOSTS, SELF_ORIGINS, PREVIEW_NAME, is_webapp_pat
                             is_public_webapp_path, mount_webapp)
 
 
-def create_app(settings, *, transport=None, web_hosts=WEB_HOSTS, engine_ctl=None, translate_transport=None):
+VIDEO_ID = re.compile(r'[A-Za-z0-9_-]{11}')
+STT_DOWN = 'Dịch vụ nghe (Whisper, cổng 8002) chưa chạy. Chạy start-all.bat; lần đầu cần cài theo docs/LISTEN.md.'
+MAX_AUDIO = 25 * 1024 * 1024
+
+
+def create_app(settings, *, transport=None, web_hosts=WEB_HOSTS, engine_ctl=None, translate_transport=None,
+               stt_transport=None):
     store = VoiceStore(settings.root)
+    stt_box = {}
+
+    def stt():
+        if 'client' not in stt_box:
+            stt_box['client'] = httpx.AsyncClient(base_url=settings.stt_url, transport=stt_transport, trust_env=False,
+                                                  timeout=httpx.Timeout(300, connect=5))
+        return stt_box['client']
+
+    async def stt_call(method, path, **kw):
+        try:
+            return await stt().request(method, path, **kw)
+        except httpx.HTTPError as e:
+            raise HTTPException(503, STT_DOWN) from e
     translator = Translator(settings.ollama_url, settings.translate_model, transport=translate_transport)
     lock = asyncio.Lock()
 
@@ -50,6 +70,8 @@ def create_app(settings, *, transport=None, web_hosts=WEB_HOSTS, engine_ctl=None
                 yield
             finally:
                 await translator.aclose()
+                if 'client' in stt_box:
+                    await stt_box['client'].aclose()
 
     async def replay(client):
         """Enroll every stored clone into the engine (engines keep clones in RAM only)."""
@@ -227,6 +249,51 @@ def create_app(settings, *, transport=None, web_hosts=WEB_HOSTS, engine_ctl=None
         except TranslatorUnavailable as e:
             raise HTTPException(503, str(e)) from e
         return {'translations': out, 'model': translator.model, 'target': target}
+
+    # ---- listening (speech-to-text on 127.0.0.1:8002) ----
+    def passthrough(r):
+        return Response(r.content, status_code=r.status_code, media_type='application/json')
+
+    @app.get('/v1/listen/status')
+    async def listen_status():
+        return passthrough(await stt_call('GET', '/health'))
+
+    @app.post('/v1/listen/prepare')
+    async def listen_prepare(request: Request):
+        try:
+            data = await request.json()
+        except ValueError as e:
+            raise HTTPException(400, 'Invalid JSON') from e
+        vid = data.get('video_id') if isinstance(data, dict) else None
+        if not isinstance(vid, str) or not VIDEO_ID.fullmatch(vid):
+            raise HTTPException(400, 'video_id must be an 11-character YouTube id')
+        return passthrough(await stt_call('POST', '/prepare', json={'video_id': vid}))
+
+    @app.get('/v1/listen/jobs/{video_id}')
+    async def listen_job(video_id: str, since: int = 0):
+        if not VIDEO_ID.fullmatch(video_id):
+            raise HTTPException(400, 'video_id must be an 11-character YouTube id')
+        return passthrough(await stt_call('GET', f'/jobs/{video_id}', params={'since': max(0, since)}))
+
+    @app.post('/v1/audio/transcriptions')
+    async def transcriptions(file: UploadFile = File(...), language: str = Form(''), model: str = Form(''),
+                             response_format: str = Form('json')):
+        """OpenAI-compatible: multipart `file` (+ optional language). json → {text}; verbose_json adds
+        language, duration and segments; text → plain text."""
+        raw = await file.read(MAX_AUDIO + 1)
+        if len(raw) > MAX_AUDIO:
+            raise HTTPException(413, 'Audio exceeds 25 MiB')
+        lang = re.sub(r'[^a-z-]', '', (language or '').lower())[:8]
+        r = await stt_call('POST', '/transcribe', content=raw, params={'language': lang} if lang else None,
+                           headers={'Content-Type': 'application/octet-stream'})
+        if r.status_code != 200:
+            return passthrough(r)
+        out = r.json()
+        if response_format == 'text':
+            return Response(out['text'], media_type='text/plain; charset=utf-8')
+        if response_format == 'verbose_json':
+            return {'task': 'transcribe', **out}
+        return {'text': out['text']}
 
     mount_webapp(app, settings, **({'ctl': engine_ctl} if engine_ctl else {}))
 

@@ -115,10 +115,12 @@ def is_ours(port: int) -> bool:
         return False
     if port == 8001:
         return body.get('service') == 'vieneu-gateway'
+    if port == 8002:
+        return body.get('service') == 'vieneu-stt'
     return body.get('status') == 'ok' and body.get('backend') in ('pytorch', 'onnx') and 'max_streams' in body
 
 
-OUR_MARKERS = ('vieneu_adapter.py', 'apps.openai_speech', 'gateway.run', 'gateway.engine')
+OUR_MARKERS = ('vieneu_adapter.py', 'apps.openai_speech', 'gateway.run', 'gateway.engine', 'stt.server')
 
 
 def process_cmdline(pid: int) -> str:
@@ -146,7 +148,7 @@ def stray_pids() -> list[int]:
     if os.name != 'nt':
         return []
     ps = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like '*vieneu-studio*' -and "
-          "$_.CommandLine -match 'start-server\\.bat|gateway\\.launch|gateway\\.engine run|vieneu_adapter|gateway\\.run|apps\\.openai_speech' } "
+          "$_.CommandLine -match 'start-server\\.bat|gateway\\.launch|gateway\\.engine run|vieneu_adapter|gateway\\.run|apps\\.openai_speech|stt\\.server' } "
           "| ForEach-Object { $_.ProcessId }")
     try:
         out = subprocess.run(['powershell', '-NoProfile', '-Command', ps], capture_output=True, text=True, timeout=30,
@@ -203,14 +205,14 @@ def main(argv=None) -> int:
         print(json.dumps({'config': cfg, 'label': OPTIONS[cfg['preset']]['label'], 'pid': listener_pid()}, ensure_ascii=False))
         return 0
     if action == 'stop':
-        for port in (8001, PORT):
+        for port in (8001, PORT, 8002):
             pid = listener_pid(port)
             if not pid:
                 print(f'127.0.0.1:{port}: nothing running')
                 continue
             if not is_ours(port):
                 # Stopping the gateway makes its launcher shut the engine down too: give that a moment.
-                if port == PORT and wait_free(port, 25):
+                if port in (PORT, 8002) and wait_free(port, 25):
                     print(f'Stopped 127.0.0.1:{port} (shut down by its launcher)')
                     continue
                 pid = listener_pid(port) or pid
@@ -228,8 +230,8 @@ def main(argv=None) -> int:
             kill_pid(pid)
         if strays:
             print(f'Cleaned up {len(strays)} leftover VieNeu Studio process(es).')
-        busy = [p for p in (8001, PORT) if not wait_free(p, 30)]
-        print('Done: ports 8000 and 8001 are free. Safe to start again.' if not busy
+        busy = [p for p in (8001, PORT, 8002) if not wait_free(p, 30)]
+        print('Done: ports 8000, 8001 and 8002 are free. Safe to start again.' if not busy
               else f'Still busy: {busy}. Wait a few seconds before starting again.')
         return 0
     cmd, env, cwd = command_and_env(root, cfg)

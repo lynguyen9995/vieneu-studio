@@ -8,6 +8,8 @@ import sys
 import time
 import httpx
 
+OPTIONAL = {8002}          # speech-to-text: nice to have, never blocks the voice engine and the gateway
+
 
 def service_state(client, port, tcp_probe=None):
     try:
@@ -30,6 +32,10 @@ def service_state(client, port, tcp_probe=None):
         body = r.json()
     except ValueError as e:
         raise RuntimeError(f'Port {port} belongs to an unrecognized service') from e
+    if port == 8002:
+        if r.status_code != 200 or body.get('status') != 'ok' or body.get('service') != 'vieneu-stt':
+            raise RuntimeError('Port 8002 belongs to an unrecognized service')
+        return 'ready'
     if r.status_code != 200 or body.get('status') != 'ok' or body.get('backend') not in ('pytorch', 'onnx'):
         raise RuntimeError(f'Port {port} belongs to an unrecognized/unhealthy service; inspect it manually')
     if port == 8001 and body.get('service') != 'vieneu-gateway':
@@ -77,8 +83,17 @@ def main():
             for port, command, logfile in [
                 (8000, ['cmd.exe', '/d', '/c', str(root / 'start-server.bat')], 'step2-upstream.log'),
                 (8001, [str(uv), 'run', '--no-sync', 'python', '-m', 'gateway.run'], 'step2-gateway.log'),
+                (8002, [str(uv), 'run', '--no-sync', 'python', '-m', 'stt.server'], 'stt.log'),
             ]:
-                if state_with_retry(client, port) == 'ready':
+                if port in OPTIONAL:
+                    try:
+                        if state_with_retry(client, port, tries=3) == 'ready':
+                            print(f'Reusing existing healthy service on 127.0.0.1:{port}.', flush=True)
+                            continue
+                    except RuntimeError as e:
+                        print(f'Skipping optional service {port}: {e}', flush=True)
+                        continue
+                elif state_with_retry(client, port) == 'ready':
                     print(f'Reusing existing healthy service on 127.0.0.1:{port}; it will NOT be stopped by this launcher.', flush=True)
                     continue
                 log = (root / 'logs' / logfile).open('a', encoding='utf-8')
@@ -88,29 +103,40 @@ def main():
                     creationflags=getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
                 children.append(process)
                 ports[process.pid] = port
-                deadline = time.monotonic() + 240
+                deadline = time.monotonic() + (60 if port in OPTIONAL else 240)
+                ready, problem = False, f'readiness timeout; inspect logs/{logfile}'
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
-                        raise RuntimeError(f'Service {port} exited; inspect logs/{logfile}')
+                        problem = f'exited; inspect logs/{logfile}'
+                        break
                     try:
                         if service_state(client, port) == 'ready':
+                            ready = True
                             break
                     except RuntimeError as e:
                         # We just started this process ourselves: a port that opens between the slow
                         # Windows connection-refused and the TCP probe is our service coming up, not a stranger.
                         if 'did not answer' not in str(e):
-                            raise
+                            problem = str(e)
+                            break
                     time.sleep(.5)
+                if ready:
+                    print(f'Ready: http://127.0.0.1:{port}', flush=True)
+                elif port in OPTIONAL:
+                    print(f'Optional service {port} not ready ({problem}). Narration still works without it.', flush=True)
                 else:
-                    raise RuntimeError(f'Service {port} readiness timeout; inspect logs/{logfile}')
-                print(f'Ready: http://127.0.0.1:{port}', flush=True)
+                    raise RuntimeError(f'Service {port} {problem}')
         if not children:
-            print('Both services were already running. No new process started.', flush=True)
+            print('All services were already running. No new process started.', flush=True)
             return
         print('Services ready. Keep this window open; Ctrl+C stops only children started here.', flush=True)
         while True:
             for p in list(children):
                 if p.poll() is None:
+                    continue
+                if ports.get(p.pid) in OPTIONAL:
+                    print(f'Optional service {ports[p.pid]} ended; see logs/stt.log. Narration keeps working.', flush=True)
+                    children.remove(p)
                     continue
                 if ports.get(p.pid) == 8000:
                     # The studio's model switch stops this engine and starts a new one itself.

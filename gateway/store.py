@@ -72,7 +72,9 @@ class VoiceStore:
             info = path.lstat()
         except FileNotFoundError:
             return
-        if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400 or info.st_nlink > 1:
+        # Hard links only matter for files: on Linux every directory has st_nlink >= 2.
+        if (stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400
+                or (stat.S_ISREG(info.st_mode) and info.st_nlink > 1)):
             raise ValueError('Linked/reparse voice state refused')
 
     def checked(self, name):
